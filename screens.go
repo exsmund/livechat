@@ -1,5 +1,7 @@
 package main
 
+import "github.com/gdamore/tcell/v2"
+
 type Screen interface {
 	Draw()
 }
@@ -126,14 +128,41 @@ func NewChatScreen(ui *UI, c *Chat) *ChatScreen {
 
 func (cs *ChatScreen) Draw() {
 	cs.ui.DrawText("Chat with "+cs.chat.remoteAddress, titleStyle)
-
-	for _, m := range cs.chat.messages {
-		style := receivedMsgStyle
-		if m.sender == cs.chat.server.address {
-			style = myMsgStyle
+	oi := uint(0)
+	ri := uint(0)
+	for {
+		if oi+1 > cs.chat.amountOwnMsgs && ri+1 > cs.chat.amountReceivedMsgs {
+			break
+		} else {
+			if oi+1 > cs.chat.amountOwnMsgs {
+				rm := &cs.chat.receivedMessages[ri]
+				cs.drawMsg(rm, receivedMsgStyle)
+				ri++
+			} else if ri+1 > cs.chat.amountReceivedMsgs {
+				om := &cs.chat.ownMessages[oi]
+				cs.drawMsg(om, myMsgStyle)
+				oi++
+			} else {
+				om := &cs.chat.ownMessages[oi]
+				rm := &cs.chat.receivedMessages[ri]
+				if rm.ts.Before(om.ts) {
+					cs.drawMsg(rm, receivedMsgStyle)
+					ri++
+				} else {
+					cs.drawMsg(om, myMsgStyle)
+					oi++
+				}
+			}
 		}
-		cs.ui.DrawText(m.text, style)
 	}
 
 	cs.ui.DrawTextBottom(cs.ui.typed, inputStyle)
+}
+
+func (cs *ChatScreen) drawMsg(m *Message, style tcell.Style) {
+	msg := m.text
+	if !m.finished {
+		msg = msg + "..."
+	}
+	cs.ui.DrawText(msg, style)
 }

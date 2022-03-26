@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"log"
@@ -8,6 +10,12 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 )
+
+type PackedMsg struct {
+	Msg      string
+	Order    uint
+	Finished bool
+}
 
 type Server struct {
 	address        string
@@ -55,13 +63,33 @@ func (s *Server) Connect(c chan<- *Event) error {
 		if err != nil {
 			continue
 		}
+		buf := bytes.NewBuffer(p[0:n])
+		dec := gob.NewDecoder(buf)
+		var p PackedMsg
+		err = dec.Decode(&p)
+		if err != nil {
+			continue
+		}
+
 		addr := remoteaddr.String()
-		msg := string(p[0:n])
-		log.Print("Recieve", addr, msg)
+		log.Print("Recieve", addr, p)
 		cht := s.GetOrCreateChat(addr)
-		cht.AddMessage(msg, addr)
+		cht.AddReceivedMessage(p, addr)
 		c <- &eventUpdateChats
 	}
+}
+
+func (s *Server) Send(p *PackedMsg, addr *net.UDPAddr) error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(p)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	s.conn.WriteToUDP(buf.Bytes(), addr)
+	return nil
 }
 
 func (s *Server) connectWithStun() (*net.UDPConn, error) {

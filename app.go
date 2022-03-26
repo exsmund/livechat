@@ -94,6 +94,8 @@ func (a *App) dispatchEvent(e *Event) {
 		a.openChat()
 	case &eventSendMessage:
 		a.sendMessage()
+	case &eventTyping:
+		a.typing()
 	case &eventBack:
 		a.eventBack()
 	default:
@@ -129,6 +131,13 @@ func (a *App) openChat() {
 	a.ui.SetScreen(NewChatScreen(a.ui, c), true, false)
 	a.setState(appStateChat)
 	a.drawUI()
+}
+
+func (a *App) typing() {
+	switch a.state {
+	case appStateChat:
+		a.activeChat.Typing(a.ui.typed)
+	}
 }
 
 func (a *App) sendMessage() {

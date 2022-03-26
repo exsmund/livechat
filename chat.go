@@ -7,16 +7,21 @@ import (
 )
 
 type Message struct {
-	text   string
-	ts     time.Time
-	sender string
+	text     string
+	order    uint
+	ts       time.Time
+	sender   string
+	finished bool
 }
 
 type Chat struct {
-	remoteAddress string
-	updAddr       *net.UDPAddr
-	messages      []Message
-	server        *Server
+	remoteAddress      string
+	updAddr            *net.UDPAddr
+	ownMessages        []Message
+	amountOwnMsgs      uint
+	receivedMessages   []Message
+	amountReceivedMsgs uint
+	server             *Server
 	// conn          *net.Conn
 }
 
@@ -35,29 +40,52 @@ func (c *Chat) SetAddress(address string) {
 	}
 }
 
-func (c *Chat) AddMessage(msg string, sender string) {
-	c.messages = append(c.messages, Message{msg, time.Now(), sender})
+func (c *Chat) AddOwnMessage(msg string, sender string) {
+	c.ownMessages = append(c.ownMessages, Message{
+		msg,
+		c.amountOwnMsgs,
+		time.Now(),
+		sender,
+		true,
+	})
+	c.amountOwnMsgs++
 }
 
-// func (c *Chat) Connect() {
-// 	conn, err := net.Dial("udp", c.remoteAddress)
-// 	if err != nil {
-// 		log.Printf("Some error %v", err)
-// 		return
-// 	}
-// 	c.conn = &conn
-// }
+func (c *Chat) AddReceivedMessage(p PackedMsg, sender string) {
+	log.Print("Add msg", p.Msg, p.Order, c.amountReceivedMsgs)
+	if c.amountReceivedMsgs < p.Order+1 {
+		for i := c.amountReceivedMsgs; i <= p.Order; i++ {
+			if i == p.Order {
+				c.receivedMessages = append(c.receivedMessages, Message{
+					p.Msg,
+					i,
+					time.Now(),
+					sender,
+					p.Finished,
+				})
+			} else {
+				c.receivedMessages = append(c.receivedMessages, Message{
+					"",
+					i,
+					time.Now(),
+					sender,
+					p.Finished,
+				})
+			}
+		}
+		c.amountReceivedMsgs = p.Order + 1
+	} else {
+		c.receivedMessages[p.Order].text = p.Msg
+		c.receivedMessages[p.Order].ts = time.Now()
+		c.receivedMessages[p.Order].finished = p.Finished
+	}
+}
 
-// func (c *Chat) Disconnect() {
-// 	if c.conn != nil {
-// 		(*c.conn).Close()
-// 		c.conn = nil
-// 	}
-// }
+func (c *Chat) Typing(msg string) {
+	c.server.Send(&PackedMsg{msg, c.amountOwnMsgs, false}, c.updAddr)
+}
 
 func (c *Chat) Send(msg string) {
-	log.Print("Send msg ", msg, " to ", c.updAddr)
-	c.server.conn.WriteToUDP([]byte(msg), c.updAddr)
-	// fmt.Fprintf(*c.server.conn, msg)
-	c.AddMessage(msg, c.server.address)
+	c.AddOwnMessage(msg, c.server.address)
+	c.server.Send(&PackedMsg{msg, c.amountOwnMsgs - 1, true}, c.updAddr)
 }

@@ -112,12 +112,14 @@ func (ui *UI) Listen(c chan<- *Event) {
 				if ev.Key() == tcell.KeyRune {
 					ui.typed += string(ev.Rune())
 					ui.Draw()
+					c <- &eventTyping
 					continue
 				} else if ev.Key() == tcell.KeyBackspace2 || ev.Key() == tcell.KeyBackspace {
 					if len(ui.typed) > 0 {
 						ui.typed = ui.typed[:len(ui.typed)-1]
 						ui.Draw()
 					}
+					c <- &eventTyping
 					continue
 				}
 			}
