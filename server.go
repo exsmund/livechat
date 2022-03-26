@@ -1,8 +1,12 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net"
+
+	"github.com/ccding/go-stun/stun"
 )
 
 type Server struct {
@@ -35,23 +39,19 @@ func (s *Server) GetOrCreateChat(addr string) *Chat {
 }
 
 func (s *Server) Connect(c chan<- *Event) error {
-	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	// err := s.connectWithStun()
+	conn, err := s.connectLocal()
 	if err != nil {
 		return err
 	}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		return err
-	}
-	s.conn = conn
 	defer conn.Close()
-	s.address = conn.LocalAddr().String()
+	s.conn = conn
 	c <- &eventUpdateChats
 
 	p := make([]byte, 2048)
 
 	for {
-		n, remoteaddr, err := conn.ReadFromUDP(p)
+		n, remoteaddr, err := s.conn.ReadFromUDP(p)
 		if err != nil {
 			continue
 		}
@@ -62,4 +62,47 @@ func (s *Server) Connect(c chan<- *Event) error {
 		cht.AddMessage(msg, addr)
 		c <- &eventUpdateChats
 	}
+}
+
+func (s *Server) connectWithStun() (*net.UDPConn, error) {
+	addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	client := stun.NewClientWithConnection(conn)
+	client.SetServerAddr("stun.sonetel.com:3478")
+	client.Keepalive()
+	nat, host, err := client.Discover()
+	log.Println("NAT Type:", nat)
+	if err != nil {
+		return nil, err
+	}
+	if host != nil {
+		log.Println("External IP Family:", host.Family())
+		log.Println("External IP:", host.IP())
+		log.Println("External Port:", host.Port())
+		s.address = host.IP() + ":" + fmt.Sprint(host.Port())
+	} else {
+		return nil, errors.New("some error")
+	}
+	return conn, nil
+}
+
+func (s *Server) connectLocal() (*net.UDPConn, error) {
+	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	s.conn = conn
+	s.address = conn.LocalAddr().String()
+	return conn, nil
 }

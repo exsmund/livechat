@@ -5,6 +5,7 @@ go 1.18
 require github.com/gdamore/tcell/v2 v2.4.0
 
 require (
+	github.com/ccding/go-stun v0.1.4 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/mattn/go-runewidth v0.0.10 // indirect
