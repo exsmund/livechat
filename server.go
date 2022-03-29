@@ -9,6 +9,8 @@ import (
 	"net"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/pion/logging"
+	"github.com/pion/turn/v2"
 )
 
 type PackedMsg struct {
@@ -22,7 +24,7 @@ type Server struct {
 	chats          []*Chat
 	activeChat     int
 	chatsByAddress map[string]*Chat
-	conn           *net.UDPConn
+	conn           net.PacketConn
 }
 
 func NewServer() *Server {
@@ -47,19 +49,20 @@ func (s *Server) GetOrCreateChat(addr string) *Chat {
 }
 
 func (s *Server) Connect(c chan<- *Event) error {
-	// err := s.connectWithStun()
-	conn, err := s.connectLocal()
+	// conn, err := s.connectWithStun()
+	conn, err := s.connectWithTurn(c)
 	if err != nil {
+		log.Fatal(err)
 		return err
 	}
-	defer conn.Close()
 	s.conn = conn
+	defer s.conn.Close()
 	c <- &eventUpdateChats
 
 	p := make([]byte, 2048)
 
 	for {
-		n, remoteaddr, err := s.conn.ReadFromUDP(p)
+		n, remoteaddr, err := conn.ReadFrom(p)
 		if err != nil {
 			continue
 		}
@@ -88,7 +91,7 @@ func (s *Server) Send(p *PackedMsg, addr *net.UDPAddr) error {
 		return err
 	}
 
-	s.conn.WriteToUDP(buf.Bytes(), addr)
+	s.conn.WriteTo(buf.Bytes(), addr)
 	return nil
 }
 
@@ -103,7 +106,7 @@ func (s *Server) connectWithStun() (*net.UDPConn, error) {
 	}
 	defer conn.Close()
 	client := stun.NewClientWithConnection(conn)
-	client.SetServerAddr("stun.sonetel.com:3478")
+	client.SetServerAddr("157.230.107.39:3478")
 	client.Keepalive()
 	nat, host, err := client.Discover()
 	log.Println("NAT Type:", nat)
@@ -133,4 +136,74 @@ func (s *Server) connectLocal() (*net.UDPConn, error) {
 	s.conn = conn
 	s.address = conn.LocalAddr().String()
 	return conn, nil
+}
+
+func (s *Server) connectWithTurn(c chan<- *Event) (net.PacketConn, error) {
+	// addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	if err != nil {
+		return nil, err
+	}
+	realm := "exs"
+	cfg := &turn.ClientConfig{
+		// STUNServerAddr: "157.230.107.39:6473",
+		// TURNServerAddr: "157.230.107.39:6473",
+		STUNServerAddr: "numb.viagenie.ca:3478",
+		TURNServerAddr: "numb.viagenie.ca:3478",
+		Conn:           conn,
+		Username:       "exsmund@gmail.com",
+		Password:       "8sCH9NnBtL9Bi8dMWhpe",
+		Realm:          realm,
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	}
+
+	client, err := turn.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	err = client.Listen()
+	if err != nil {
+		return nil, err
+	}
+
+	relayConn, err := client.Allocate()
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("relayed-address=%s", relayConn.LocalAddr().String())
+
+	mappedAddr, err := client.SendBindingRequest()
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("mapped-address=%s", mappedAddr.String())
+
+	_, err = relayConn.WriteTo([]byte("Hello"), mappedAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	s.address = relayConn.LocalAddr().String()
+	// c <- &eventUpdateChats
+
+	// buf := make([]byte, 1600)
+	// for {
+	// 	n, from, readerErr := relayConn.ReadFrom(buf)
+	// 	if readerErr != nil {
+	// 		break
+	// 	}
+	// 	log.Print(buf[:n], from)
+
+	// 	// Echo back
+	// 	if _, readerErr = relayConn.WriteTo(buf[:n], from); readerErr != nil {
+	// 		break
+	// 	}
+	// }
+
+	return relayConn, nil
 }
