@@ -82,10 +82,10 @@ func (c *Chat) AddReceivedMessage(p PackedMsg, sender string) {
 }
 
 func (c *Chat) Typing(msg string) {
-	c.server.Send(&PackedMsg{msg, c.amountOwnMsgs, false}, c.updAddr)
+	c.server.Send(msg, c.amountOwnMsgs, false, c.updAddr)
 }
 
 func (c *Chat) Send(msg string) {
 	c.AddOwnMessage(msg, c.server.address)
-	c.server.Send(&PackedMsg{msg, c.amountOwnMsgs - 1, true}, c.updAddr)
+	c.server.Send(msg, c.amountOwnMsgs-1, true, c.updAddr)
 }
