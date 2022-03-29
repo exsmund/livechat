@@ -67,7 +67,7 @@ var stateEventMap = map[AppState]KeyEventMap{
 var startMenu = Menu{
 	items: []MenuItem{
 		{
-			"Start chating",
+			"Start chatting",
 			&eventCreateServer,
 		},
 		{
