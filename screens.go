@@ -31,7 +31,7 @@ func (ss *StartScreen) Draw() {
 		if i == ss.Menu.active {
 			style = menuActiveItemStyle
 		}
-		ss.ui.DrawText(item.label, style)
+		ss.ui.DrawText(item.label, style, false)
 	}
 }
 
@@ -75,13 +75,13 @@ func (ss *ServerScreen) GetMenuEvent() *Event {
 
 func (ss *ServerScreen) Draw() {
 	if len(ss.server.address) > 0 {
-		ss.ui.DrawText("Server: "+ss.server.address, titleStyle)
+		ss.ui.DrawText("Server: "+ss.server.address, titleStyle, false)
 		for i, c := range ss.server.chats {
 			style := menuItemStyle
 			if i == ss.activeChat {
 				style = menuActiveItemStyle
 			}
-			ss.ui.DrawText("Chat with "+c.remoteAddress, style)
+			ss.ui.DrawText("Chat with "+c.remoteAddress, style, false)
 		}
 		chatsLen := len(ss.server.chats)
 		for i, item := range ss.menu.items {
@@ -89,10 +89,10 @@ func (ss *ServerScreen) Draw() {
 			if i+chatsLen == ss.activeChat {
 				style = menuActiveItemStyle
 			}
-			ss.ui.DrawText(item.label, style)
+			ss.ui.DrawText(item.label, style, false)
 		}
 	} else {
-		ss.ui.DrawText("Creating Server...", titleStyle)
+		ss.ui.DrawText("Creating Server...", titleStyle, false)
 	}
 
 }
@@ -109,8 +109,8 @@ func NewConnectServerScreen(ui *UI) *ConnectServerScreen {
 }
 
 func (ss *ConnectServerScreen) Draw() {
-	ss.ui.DrawText("Input server address", titleStyle)
-	ss.ui.DrawText(ss.ui.typed, inputStyle)
+	ss.ui.DrawText("Input server address", titleStyle, false)
+	ss.ui.DrawText(ss.ui.typed, inputStyle, true)
 }
 
 type ChatScreen struct {
@@ -127,7 +127,7 @@ func NewChatScreen(ui *UI, c *Chat) *ChatScreen {
 }
 
 func (cs *ChatScreen) Draw() {
-	cs.ui.DrawText("Chat with "+cs.chat.remoteAddress, titleStyle)
+	cs.ui.DrawText("Chat with "+cs.chat.remoteAddress, titleStyle, false)
 	oi := uint(0)
 	ri := uint(0)
 	for {
@@ -156,7 +156,7 @@ func (cs *ChatScreen) Draw() {
 		}
 	}
 
-	cs.ui.DrawTextBottom(cs.ui.typed, inputStyle)
+	cs.ui.DrawTextBottom(cs.ui.typed, inputStyle, true)
 }
 
 func (cs *ChatScreen) drawMsg(m *Message, style tcell.Style) {
@@ -164,5 +164,5 @@ func (cs *ChatScreen) drawMsg(m *Message, style tcell.Style) {
 	if !m.finished {
 		msg = msg + "..."
 	}
-	cs.ui.DrawText(msg, style)
+	cs.ui.DrawText(msg, style, false)
 }

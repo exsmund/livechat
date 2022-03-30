@@ -3,8 +3,10 @@ package main
 import (
 	"log"
 	"math"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/mattn/go-runewidth"
 )
 
 var keyMap = map[int16]string{
@@ -31,6 +33,7 @@ type UI struct {
 	enableTyping bool
 	emptyRow     int
 	typed        string
+	runes        []rune
 }
 
 func NewUI(f func() *KeyEventMap) (*UI, error) {
@@ -66,6 +69,7 @@ func (ui *UI) SetScreen(s Screen, typing bool, vMenu bool) {
 	ui.enableTyping = typing
 	ui.enableVMenu = vMenu
 	ui.typed = ""
+	ui.runes = []rune{}
 	ui.emptyRow = 0
 }
 
@@ -79,6 +83,7 @@ func (ui *UI) DisableTyping() {
 
 func (ui *UI) ClearTyped() {
 	ui.typed = ""
+	ui.runes = []rune{}
 }
 
 func (ui *UI) EnableVMenu() {
@@ -100,6 +105,7 @@ func (ui *UI) Listen(c chan<- *Event) {
 	for {
 		// Process event
 		ev := ui.tcs.PollEvent()
+		// log.Printf("%t", ev)
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			ui.tcs.Sync()
@@ -107,16 +113,19 @@ func (ui *UI) Listen(c chan<- *Event) {
 			if ev.Key() == tcell.KeyCtrlC {
 				panic("err")
 			}
-			log.Print("Input |", ev.Name(), "|", ev.Key())
+			log.Print("Input | ", ev.Name(), " | ", ev.Key(), " | ", ev.Rune())
 			if ui.enableTyping {
 				if ev.Key() == tcell.KeyRune {
 					ui.typed += string(ev.Rune())
+					ui.runes = append(ui.runes, ev.Rune())
+					log.Print(ui.typed)
+					log.Print(ui.runes)
 					ui.Draw()
 					c <- &eventTyping
 					continue
 				} else if ev.Key() == tcell.KeyBackspace2 || ev.Key() == tcell.KeyBackspace {
 					if len(ui.typed) > 0 {
-						ui.typed = ui.typed[:len(ui.typed)-1]
+						ui.typed = removeLastRune(ui.typed)
 						ui.Draw()
 					}
 					c <- &eventTyping
@@ -153,6 +162,11 @@ func (ui *UI) Listen(c chan<- *Event) {
 	}
 }
 
+func removeLastRune(s string) string {
+	_, n := utf8.DecodeLastRuneInString(s)
+	return s[:len(s)-n]
+}
+
 func (ui *UI) findInputEvent(ev *tcell.EventKey) *InputEvent {
 	k, ok := keyMap[int16(ev.Key())]
 	if !ok {
@@ -173,43 +187,91 @@ func (ui *UI) Destroy() {
 	}
 }
 
-func (ui *UI) DrawText(text string, style tcell.Style) {
+func (ui *UI) DrawText(text string, style tcell.Style, cursor bool) {
 	s := ui.tcs
-	w, h := s.Size()
-	r := ui.emptyRow
-	c := 0
 
-	for _, ru := range []rune(text) {
-		if r > h {
-			break
-		}
-		s.SetContent(c, r, ru, nil, style)
-		c++
-		if c >= w {
-			r++
-			c = 0
-		}
+	// w, h := s.Size()
+	r := ui.emptyRow
+	// c := 0
+
+	x, y := ui.puts(style, 0, r, text)
+	ui.emptyRow = y + 1
+	if cursor {
+		s.ShowCursor(x, y)
 	}
-	ui.emptyRow = r + 1
 }
 
-func (ui *UI) DrawTextBottom(text string, style tcell.Style) {
+func (ui *UI) DrawTextBottom(text string, style tcell.Style, cursor bool) {
 	s := ui.tcs
 	w, h := s.Size()
 
-	rowsAmount := int(math.Ceil(float64(len(text)) / float64(w)))
+	rowsAmount := int(math.Ceil(float64(utf8.RuneCountInString(text)) / float64(w)))
 	r := h - rowsAmount
-	c := 0
+	// c := 0
 
-	for _, ru := range []rune(text) {
-		if r > h {
+	x, y := ui.puts(style, 0, r, text)
+	if cursor {
+		s.ShowCursor(x, y)
+	}
+}
+
+func (ui *UI) puts(style tcell.Style, x, y int, str string) (int, int) {
+	s := ui.tcs
+
+	w, h := s.Size()
+
+	i := x
+	var deferred []rune
+	dwidth := 0
+	zwj := false
+	for _, r := range str {
+		if y > h {
 			break
 		}
-		s.SetContent(c, r, ru, nil, style)
-		c++
-		if c >= w {
-			r++
-			c = 0
+		if r == '\u200d' {
+			if len(deferred) == 0 {
+				deferred = append(deferred, ' ')
+				dwidth = 1
+			}
+			deferred = append(deferred, r)
+			zwj = true
+			continue
+		}
+		if zwj {
+			deferred = append(deferred, r)
+			zwj = false
+			continue
+		}
+		switch runewidth.RuneWidth(r) {
+		case 0:
+			if len(deferred) == 0 {
+				deferred = append(deferred, ' ')
+				dwidth = 1
+			}
+		case 1:
+			if len(deferred) != 0 {
+				s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				i += dwidth
+			}
+			deferred = nil
+			dwidth = 1
+		case 2:
+			if len(deferred) != 0 {
+				s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				i += dwidth
+			}
+			deferred = nil
+			dwidth = 2
+		}
+		deferred = append(deferred, r)
+		if i >= w {
+			y++
+			i = x
 		}
 	}
+	if len(deferred) != 0 {
+		s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+		i += dwidth
+	}
+	return i, y
 }
