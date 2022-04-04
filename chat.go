@@ -6,20 +6,13 @@ import (
 	"time"
 )
 
-type Message struct {
-	text     string
-	order    uint
-	ts       time.Time
-	sender   string
-	finished bool
-}
-
 type Chat struct {
 	remoteAddress      string
 	updAddr            *net.UDPAddr
-	ownMessages        []Message
+	allMessages        []*Message
+	ownMessages        []*Message
 	amountOwnMsgs      uint
-	receivedMessages   []Message
+	receivedMessages   []*Message
 	amountReceivedMsgs uint
 	server             *Server
 	// conn          *net.Conn
@@ -41,13 +34,16 @@ func (c *Chat) SetAddress(address string) {
 }
 
 func (c *Chat) AddOwnMessage(msg string, sender string) {
-	c.ownMessages = append(c.ownMessages, Message{
+	m := NewMessage(
 		msg,
 		c.amountOwnMsgs,
 		time.Now(),
 		sender,
 		true,
-	})
+		true,
+	)
+	c.ownMessages = append(c.ownMessages, m)
+	c.allMessages = append(c.allMessages, m)
 	c.amountOwnMsgs++
 }
 
@@ -55,27 +51,32 @@ func (c *Chat) AddReceivedMessage(p PackedMsg, sender string) {
 	log.Print("Add msg", p.Msg, p.Order, c.amountReceivedMsgs)
 	if c.amountReceivedMsgs < p.Order+1 {
 		for i := c.amountReceivedMsgs; i <= p.Order; i++ {
+			var m *Message
 			if i == p.Order {
-				c.receivedMessages = append(c.receivedMessages, Message{
+				m = NewMessage(
 					p.Msg,
 					i,
 					time.Now(),
 					sender,
 					p.Finished,
-				})
+					false,
+				)
 			} else {
-				c.receivedMessages = append(c.receivedMessages, Message{
+				m = NewMessage(
 					"",
 					i,
 					time.Now(),
 					sender,
 					p.Finished,
-				})
+					false,
+				)
 			}
+			c.receivedMessages = append(c.receivedMessages, m)
+			c.allMessages = append(c.allMessages, m)
 		}
 		c.amountReceivedMsgs = p.Order + 1
 	} else {
-		c.receivedMessages[p.Order].text = p.Msg
+		c.receivedMessages[p.Order].SetText(p.Msg)
 		c.receivedMessages[p.Order].ts = time.Now()
 		c.receivedMessages[p.Order].finished = p.Finished
 	}

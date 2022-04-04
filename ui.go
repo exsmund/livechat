@@ -31,7 +31,8 @@ type UI struct {
 	getKeysMap   func() *KeyEventMap
 	enableVMenu  bool
 	enableTyping bool
-	emptyRow     int
+	topRows      int
+	bottomRows   int
 	typed        string
 	runes        []rune
 }
@@ -70,7 +71,7 @@ func (ui *UI) SetScreen(s Screen, typing bool, vMenu bool) {
 	ui.enableVMenu = vMenu
 	ui.typed = ""
 	ui.runes = []rune{}
-	ui.emptyRow = 0
+	ui.topRows = 0
 }
 
 func (ui *UI) EnableTyping() {
@@ -96,7 +97,8 @@ func (ui *UI) DisableVMenu() {
 
 func (ui *UI) Draw() {
 	ui.tcs.Clear()
-	ui.emptyRow = 0
+	ui.topRows = 0
+	ui.bottomRows = 0
 	ui.screen.Draw()
 	ui.tcs.Show()
 }
@@ -191,11 +193,11 @@ func (ui *UI) DrawText(text string, style tcell.Style, cursor bool) {
 	s := ui.tcs
 
 	// w, h := s.Size()
-	r := ui.emptyRow
+	r := ui.topRows
 	// c := 0
 
 	x, y := ui.puts(style, 0, r, text)
-	ui.emptyRow = y + 1
+	ui.topRows = y + 1
 	if cursor {
 		s.ShowCursor(x, y)
 	}
@@ -206,10 +208,10 @@ func (ui *UI) DrawTextBottom(text string, style tcell.Style, cursor bool) {
 	w, h := s.Size()
 
 	rowsAmount := int(math.Ceil(float64(utf8.RuneCountInString(text)) / float64(w)))
-	r := h - rowsAmount
-	// c := 0
+	r := h - rowsAmount - ui.bottomRows
 
 	x, y := ui.puts(style, 0, r, text)
+	ui.bottomRows += rowsAmount
 	if cursor {
 		s.ShowCursor(x, y)
 	}
@@ -219,13 +221,15 @@ func (ui *UI) puts(style tcell.Style, x, y int, str string) (int, int) {
 	s := ui.tcs
 
 	w, h := s.Size()
+	yMin := ui.topRows
+	yMax := h - ui.bottomRows
 
 	i := x
 	var deferred []rune
 	dwidth := 0
 	zwj := false
 	for _, r := range str {
-		if y > h {
+		if y > yMax {
 			break
 		}
 		if r == '\u200d' {
@@ -250,14 +254,18 @@ func (ui *UI) puts(style tcell.Style, x, y int, str string) (int, int) {
 			}
 		case 1:
 			if len(deferred) != 0 {
-				s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				if y >= yMin {
+					s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				}
 				i += dwidth
 			}
 			deferred = nil
 			dwidth = 1
 		case 2:
 			if len(deferred) != 0 {
-				s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				if y >= yMin {
+					s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				}
 				i += dwidth
 			}
 			deferred = nil
@@ -270,7 +278,9 @@ func (ui *UI) puts(style tcell.Style, x, y int, str string) (int, int) {
 		}
 	}
 	if len(deferred) != 0 {
-		s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+		if y >= yMin {
+			s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+		}
 		i += dwidth
 	}
 	return i, y

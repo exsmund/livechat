@@ -128,35 +128,15 @@ func NewChatScreen(ui *UI, c *Chat) *ChatScreen {
 
 func (cs *ChatScreen) Draw() {
 	cs.ui.DrawText("Chat with "+cs.chat.remoteAddress, titleStyle, false)
-	oi := uint(0)
-	ri := uint(0)
-	for {
-		if oi+1 > cs.chat.amountOwnMsgs && ri+1 > cs.chat.amountReceivedMsgs {
-			break
-		} else {
-			if oi+1 > cs.chat.amountOwnMsgs {
-				rm := &cs.chat.receivedMessages[ri]
-				cs.drawMsg(rm, receivedMsgStyle)
-				ri++
-			} else if ri+1 > cs.chat.amountReceivedMsgs {
-				om := &cs.chat.ownMessages[oi]
-				cs.drawMsg(om, myMsgStyle)
-				oi++
-			} else {
-				om := &cs.chat.ownMessages[oi]
-				rm := &cs.chat.receivedMessages[ri]
-				if rm.ts.Before(om.ts) {
-					cs.drawMsg(rm, receivedMsgStyle)
-					ri++
-				} else {
-					cs.drawMsg(om, myMsgStyle)
-					oi++
-				}
-			}
-		}
-	}
-
 	cs.ui.DrawTextBottom(cs.ui.typed, inputStyle, true)
+	for i := len(cs.chat.allMessages) - 1; i > 0; i-- {
+		msg := cs.chat.allMessages[i]
+		style := receivedMsgStyle
+		if msg.own {
+			style = myMsgStyle
+		}
+		cs.drawMsg(msg, style)
+	}
 }
 
 func (cs *ChatScreen) drawMsg(m *Message, style tcell.Style) {
@@ -164,5 +144,5 @@ func (cs *ChatScreen) drawMsg(m *Message, style tcell.Style) {
 	if !m.finished {
 		msg = msg + "..."
 	}
-	cs.ui.DrawText(msg, style, false)
+	cs.ui.DrawTextBottom(msg, style, false)
 }
