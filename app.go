@@ -31,11 +31,17 @@ func (a *App) init() error {
 	a.inputEvents = make(chan *Event)
 	a.setState(appStateStarting)
 
-	a.ui, err = NewUI(a.getKeys)
+	a.ui, err = NewUI(a.getKeys, a.inputEvents)
 	if err != nil {
 		return err
 	}
 	a.ui.SetScreen(NewStartScreen(a.ui, &startMenu), false, true)
+
+	go func() {
+		if e := a.ui.Run(); e != nil {
+			log.Fatal(e.Error())
+		}
+	}()
 
 	return nil
 }
@@ -49,7 +55,7 @@ func (a *App) Loop() {
 	}()
 	log.Print("Loop")
 
-	go a.ui.Listen(a.inputEvents)
+	// go a.ui.Listen(a.inputEvents)
 	a.drawUI()
 	for a.state != appStateEnded {
 		select {
@@ -58,6 +64,8 @@ func (a *App) Loop() {
 			a.dispatchEvent(e)
 		}
 	}
+	// a.ui.Refresh()
+	// a.ui.Quit()
 	log.Print("End loop")
 }
 
@@ -73,7 +81,7 @@ func (a *App) getKeys() *KeyEventMap {
 }
 
 func (a *App) drawUI() {
-	a.ui.Draw()
+	a.ui.Update2()
 }
 
 func (a *App) setState(s AppState) {

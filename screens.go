@@ -1,9 +1,15 @@
 package main
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"log"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v2/views"
+)
 
 type Screen interface {
-	Draw()
+	Update()
+	views.Widget
 }
 
 type ScreenWithMenu interface {
@@ -13,54 +19,97 @@ type ScreenWithMenu interface {
 }
 
 type StartScreen struct {
-	ui *UI
+	ui      *UI
+	widgets []*views.TextBar
 	Menu
+	views.BoxLayout
 }
 
 func NewStartScreen(ui *UI, m *Menu) *StartScreen {
-	ss := StartScreen{
+	s := StartScreen{
 		ui:   ui,
 		Menu: *m,
 	}
-	return &ss
+	s.SetOrientation(views.Vertical)
+	for i, item := range m.items {
+		t := views.NewTextBar()
+		style := menuItemStyle
+		if i == s.Menu.active {
+			style = menuActiveItemStyle
+		}
+		t.SetCenter(item.label, style)
+		s.AddWidget(t, 0)
+		s.widgets = append(s.widgets, t)
+	}
+
+	return &s
 }
 
-func (ss *StartScreen) Draw() {
+func (ss *StartScreen) HandleEvent(ev tcell.Event) bool {
+	return ss.ui.HandleEvent(ev)
+}
+
+func (ss *StartScreen) Update() {
 	for i, item := range ss.Menu.items {
 		style := menuItemStyle
 		if i == ss.Menu.active {
 			style = menuActiveItemStyle
 		}
-		ss.ui.DrawText(item.label, style, false)
+		ss.widgets[i].SetCenter(item.label, style)
 	}
 }
 
 type ServerScreen struct {
-	ui         *UI
-	server     *Server
-	menu       *Menu
+	ui     *UI
+	server *Server
+	Menu
 	activeChat int
+	top        *views.TextBar
+	chatWidget *views.BoxLayout
+	widgets    []*views.TextBar
+	views.BoxLayout
 }
 
 func NewServerScreen(ui *UI, s *Server, m *Menu) *ServerScreen {
 	ss := ServerScreen{
-		ui:     ui,
-		server: s,
-		menu:   m,
+		ui:         ui,
+		server:     s,
+		Menu:       *m,
+		top:        views.NewTextBar(),
+		chatWidget: views.NewBoxLayout(views.Vertical),
+	}
+	ss.top.SetCenter("Creating Server...", titleStyle)
+	ss.AddWidget(ss.top, 0)
+	ss.AddWidget(ss.chatWidget, 0)
+	ss.SetOrientation(views.Vertical)
+
+	for i, item := range m.items {
+		t := views.NewTextBar()
+		style := menuItemStyle
+		if i == ss.Menu.active {
+			style = menuActiveItemStyle
+		}
+		t.SetCenter(item.label, style)
+		ss.AddWidget(t, 0)
+		ss.widgets = append(ss.widgets, t)
 	}
 	return &ss
+}
+
+func (s *ServerScreen) HandleEvent(ev tcell.Event) bool {
+	return s.ui.HandleEvent(ev)
 }
 
 func (ss *ServerScreen) MenuUp() {
 	ss.activeChat--
 	if ss.activeChat < 0 {
-		ss.activeChat = len(ss.server.chats) + ss.menu.len - 1
+		ss.activeChat = len(ss.server.chats) + ss.Menu.len - 1
 	}
 }
 
 func (ss *ServerScreen) MenuDown() {
 	ss.activeChat++
-	if ss.activeChat >= len(ss.server.chats)+ss.menu.len {
+	if ss.activeChat >= len(ss.server.chats)+ss.Menu.len {
 		ss.activeChat = 0
 	}
 }
@@ -70,12 +119,13 @@ func (ss *ServerScreen) GetMenuEvent() *Event {
 		ss.server.activeChat = ss.activeChat
 		return &eventOpenChat
 	}
-	return ss.menu.items[ss.activeChat-len(ss.server.chats)].event
+	return ss.Menu.items[ss.activeChat-len(ss.server.chats)].event
 }
 
-func (ss *ServerScreen) Draw() {
+func (ss *ServerScreen) Update() {
+	log.Print("ServerScreen update")
 	if len(ss.server.address) > 0 {
-		ss.ui.DrawText("Server: "+ss.server.address, titleStyle, false)
+		ss.top.SetCenter("Server: "+ss.server.address, titleStyle)
 		for i, c := range ss.server.chats {
 			style := menuItemStyle
 			if i == ss.activeChat {
@@ -84,38 +134,51 @@ func (ss *ServerScreen) Draw() {
 			ss.ui.DrawText("Chat with "+c.remoteAddress, style, false)
 		}
 		chatsLen := len(ss.server.chats)
-		for i, item := range ss.menu.items {
+		for i, item := range ss.Menu.items {
 			style := menuItemStyle
 			if i+chatsLen == ss.activeChat {
 				style = menuActiveItemStyle
 			}
-			ss.ui.DrawText(item.label, style, false)
+			ss.widgets[i].SetCenter(item.label, style)
 		}
 	} else {
-		ss.ui.DrawText("Creating Server...", titleStyle, false)
+		ss.top.SetCenter("Creating Server...", titleStyle)
 	}
 
 }
 
 type ConnectServerScreen struct {
-	ui *UI
+	ui    *UI
+	top   *views.TextBar
+	input *views.TextBar
+
+	views.BoxLayout
 }
 
 func NewConnectServerScreen(ui *UI) *ConnectServerScreen {
-	css := ConnectServerScreen{
-		ui: ui,
+	s := ConnectServerScreen{
+		ui:    ui,
+		top:   views.NewTextBar(),
+		input: views.NewTextBar(),
 	}
-	return &css
+	s.SetOrientation(views.Vertical)
+	s.top.SetCenter("Input server address", titleStyle)
+	s.AddWidget(s.top, 0)
+	// s.input.SetStyle(inputStyle)
+	s.AddWidget(s.input, 0)
+	return &s
 }
 
-func (ss *ConnectServerScreen) Draw() {
-	ss.ui.DrawText("Input server address", titleStyle, false)
-	ss.ui.DrawText(ss.ui.typed, inputStyle, true)
+func (ss *ConnectServerScreen) Update() {
+	// ss.ui.DrawText("Input server address", titleStyle, false)
+	// ss.ui.DrawText(ss.ui.typed, inputStyle, true)
+	ss.input.SetCenter(ss.ui.typed, inputStyle)
 }
 
 type ChatScreen struct {
 	ui   *UI
 	chat *Chat
+	views.BoxLayout
 }
 
 func NewChatScreen(ui *UI, c *Chat) *ChatScreen {
@@ -126,7 +189,7 @@ func NewChatScreen(ui *UI, c *Chat) *ChatScreen {
 	return &cs
 }
 
-func (cs *ChatScreen) Draw() {
+func (cs *ChatScreen) Update() {
 	cs.ui.DrawText("Chat with "+cs.chat.remoteAddress, titleStyle, false)
 	oi := uint(0)
 	ri := uint(0)
